@@ -2,6 +2,7 @@
 import numpy as np
 from EconModel import EconModelClass
 from GEModelTools import GEModelClass
+import numba as nb
 
 import household_problem
 import steady_state
@@ -152,6 +153,52 @@ class HANKModelClass(EconModelClass,GEModelClass):
     prepare_hh_ss = steady_state.prepare_hh_ss
     find_ss = steady_state.find_ss        
 
+    def calc_MPC(self):
+        """Compute MPC from heterogeneous household policy and Jacobian."""
+
+        par = self.par
+        ss = self.ss
+
+        MPC = np.sum(
+            ss.D[:, :, :-1]
+            * (ss.c[:, :, 1:] - ss.c[:, :, :-1])
+            / ((1 + ss.ra) * (par.a_grid[1:] - par.a_grid[:-1]))
+        )
+        iMPC = -self.jac_hh[("C_hh", "chi")]
+        annual_MPC = np.sum(iMPC[:4, 0])
+        print(f"{MPC = :.2f}, {iMPC[0,0] = :.2f}")
+        print(f"{annual_MPC = :.2f}")
+
+    def get_RA_J(self):
+        """Return RA Jacobian for C_hh and A_hh with respect to Z and ra."""
+
+        par, ss = self.par, self.ss
+        T = par.T
+
+        M_RA = {
+            "C_hh": {"Z": np.zeros((T, T)), "ra": np.zeros((T, T))},
+            "A_hh": {"Z": np.zeros((T, T)), "ra": np.zeros((T, T))},
+        }
+
+        h = 1e-4
+        Z = np.zeros(T) + ss.Z
+        ra = np.zeros(T) + ss.ra
+
+        for s in range(T):
+            Z_ = Z.copy()
+            Z_[s] += h
+            C, A = RA_block(ra, Z_, par.sigma, ss.ra, ss.C_hh, ss.A_hh, T)
+            M_RA["C_hh"]["Z"][:, s] = (C - ss.C_hh) / h
+            M_RA["A_hh"]["Z"][:, s] = (A - ss.A_hh) / h
+
+            ra_ = ra.copy()
+            ra_[s] += h
+            C, A = RA_block(ra_, Z, par.sigma, ss.ra, ss.C_hh, ss.A_hh, T)
+            M_RA["C_hh"]["ra"][:, s] = (C - ss.C_hh) / h
+            M_RA["A_hh"]["ra"][:, s] = (A - ss.A_hh) / h
+
+        return M_RA
+
 
 class TANKModelClass(HANKModelClass):
 
@@ -217,5 +264,34 @@ class RANKModelClass(HANKModelClass):
             'blocks.labor_supply',
             'blocks.market_clearing'
         ]     
+
+
+@nb.njit
+def RA_block(ra, Z, sigma, ss_ra, ss_C, ss_A, T):
+    C_hh = np.zeros(T)
+    A_hh = np.zeros(T)
+
+    beta_RA = 1 / (1 + ss_ra)
+    for s in range(T):
+        t = T - 1 - s
+
+        if s == 0:
+            C_p = ss_C
+            ra_p = ss_ra
+        else:
+            C_p = C_hh[t + 1]
+            ra_p = ra[t + 1]
+
+        C_hh[t] = ((1 + ra_p) * beta_RA * C_p ** (-sigma)) ** (-1 / sigma)
+
+    for t in range(T):
+        if t == 0:
+            A_lag = ss_A
+        else:
+            A_lag = A_hh[t - 1]
+
+        A_hh[t] = (1 + ra[t]) * A_lag + Z[t] - C_hh[t]
+
+    return C_hh, A_hh
 
 

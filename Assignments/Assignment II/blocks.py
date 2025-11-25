@@ -40,7 +40,7 @@ def RA_HHs(par,ini,ss, L, C_hh, A_hh, MUC_hh, r, transfers, tax, C_R):
                 r_p = r[t+1]
                 CR_p = C_R[t+1]
 
-            C_R[t] = # fill up here
+            C_R[t] = (par.beta*(1+r_p))**(1/par.sigma) * CR_p
         
         # aggregate
         C_hh[:] = C_R
@@ -52,7 +52,8 @@ def RA_HHs(par,ini,ss, L, C_hh, A_hh, MUC_hh, r, transfers, tax, C_R):
             else:
                 A_lag = A_hh[t-1] 
             
-            A_hh[t] = # fill up here
+            income = (1-tax[t])*L[t] + transfers[t]
+            A_hh[t] = (1+r[t]) * A_lag + income - C_R[t]
 
         # MUC_hh[:] = C_hh**(-par.sigma)
         MUC_hh[:] = C_R**(-par.sigma)
@@ -73,7 +74,7 @@ def TA_HHs(par,ini,ss,L, C_hh, A_hh, MUC_hh, r, C_R, C_HtM, transfers, tax):
                 r_p = r[t+1]
                 CR_p = C_R[t+1]
 
-            C_R[t] = # fill up here
+            C_R[t] = (par.beta*(1+r_p))**(1/par.sigma) * CR_p
         
         # Solve HtM consumption 
         C_HtM[:] = (1-tax)*L + transfers
@@ -88,11 +89,14 @@ def TA_HHs(par,ini,ss,L, C_hh, A_hh, MUC_hh, r, C_R, C_HtM, transfers, tax):
             else:
                 A_lag = A_hh[t-1] 
             
-            A_hh[t] = # fill up here
+            income = (1-tax[t])*L[t] + transfers[t]
+            A_hh[t] = (1+r[t]) * A_lag + income - C_hh[t]
 
 
         # MUC_hh[:] = C_hh**(-par.sigma)
-        MUC_hh[:] = # fill up here
+        saver_muc = C_R**(-par.sigma)
+        htm_muc = C_HtM**(-par.sigma)
+        MUC_hh[:] = saver_muc*(1-par.sHtM) + htm_muc*par.sHtM
 
 
 

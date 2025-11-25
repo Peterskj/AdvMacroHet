@@ -42,7 +42,9 @@ def prepare_hh_ss(model):
         for i_z in range(par.Nz):
 
             z = par.z_grid[i_z]
-            income = (1-par.tax)*ss.L*z - ss.Taxes
+            # Use household-level income consistent with other blocks:
+            # after-tax labor income plus transfers
+            income = (1-ss.tax)*ss.L*z + ss.transfers
 
             c = (1+ss.r)*par.a_grid + income
             v_a[i_fix,i_z,:] = c**(-par.sigma)
